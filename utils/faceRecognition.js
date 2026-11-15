@@ -1,10 +1,6 @@
-// Face detector is a native module. We check if it exists to avoid crashing in Expo Go.
-let FaceDetector = null;
-try {
-    FaceDetector = require('expo-face-detector');
-} catch (e) {
-    console.warn('FaceDetector native module not found. Falling back to manual capture mode.');
-}
+// expo-face-detector was deprecated and removed in modern Expo SDKs (SDK 51+).
+// The app operates using camera frames and face-api for attendance verification.
+const FaceDetector = null;
 
 /**
  * Face detector configuration
