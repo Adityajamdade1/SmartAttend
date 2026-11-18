@@ -4,6 +4,7 @@ import {
     ActivityIndicator,
     Alert,
     FlatList,
+    Image,
     StyleSheet,
     Text,
     TextInput,
@@ -13,7 +14,7 @@ import {
 import { FeatureGate } from '../../components/FeatureGate';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebaseConfig';
-import { formatDate } from '../../utils/attendance';
+import { formatDate, getFacePhotoUri } from '../../utils/attendance';
 import { pdfReportService } from '../../services/pdfReportService';
 
 export default function AdminAttendanceScreen({ navigation }) {
@@ -136,6 +137,7 @@ export default function AdminAttendanceScreen({ navigation }) {
 
     const renderAttendanceItem = ({ item }) => {
         const style = getStatusStyle(item.status);
+        const faceUri = getFacePhotoUri(item);
         return (
             <TouchableOpacity
                 style={styles.card}
@@ -150,9 +152,21 @@ export default function AdminAttendanceScreen({ navigation }) {
                 })}
             >
                 <View style={styles.cardRow}>
-                    <View style={styles.userInfo}>
-                        <Text style={styles.name}>{item.employeeName || 'Unknown User'}</Text>
-                        <Text style={styles.id}>{item.employeeId || 'ID N/A'}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                        {faceUri ? (
+                            <Image
+                                source={{ uri: faceUri }}
+                                style={styles.empAvatar}
+                            />
+                        ) : (
+                            <View style={styles.empAvatarPlaceholder}>
+                                <Ionicons name="person" size={18} color="#94A3B8" />
+                            </View>
+                        )}
+                        <View style={styles.userInfo}>
+                            <Text style={styles.name}>{item.employeeName || 'Unknown User'}</Text>
+                            <Text style={styles.id}>{item.employeeId || 'ID N/A'}</Text>
+                        </View>
                     </View>
                     <View style={[styles.statusBadge, { backgroundColor: style.bg }]}>
                         <Text style={[styles.statusText, { color: style.text }]}>
@@ -302,7 +316,22 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 3,
     },
-    cardRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
+    cardRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+    empAvatar: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        borderWidth: 1.5,
+        borderColor: '#10B981',
+    },
+    empAvatarPlaceholder: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#F1F5F9',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
     userInfo: { flex: 1 },
     name: { fontSize: 16, fontWeight: 'bold', color: '#2C3E50' },
     id: { fontSize: 12, color: '#7F8C8D' },

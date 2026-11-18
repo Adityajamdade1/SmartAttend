@@ -522,3 +522,67 @@ export const getGreeting = () => {
     if (hour < 17) return 'Good Afternoon';
     return 'Good Evening';
 };
+
+/**
+ * Format decimal hours to exact "X hrs Y mins" or "Y mins"
+ */
+export const formatDurationHM = (decimalHours) => {
+    if (decimalHours === undefined || decimalHours === null || isNaN(decimalHours) || decimalHours <= 0) {
+        return '0 hrs 0 mins';
+    }
+    const totalMinutes = Math.round(decimalHours * 60);
+    const hrs = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    const hrUnit = hrs === 1 ? 'hr' : 'hrs';
+    const minUnit = mins === 1 ? 'min' : 'mins';
+    if (hrs === 0) return `${mins} ${minUnit}`;
+    if (mins === 0) return `${hrs} ${hrUnit}`;
+    return `${hrs} ${hrUnit} ${mins} ${minUnit}`;
+};
+
+/**
+ * Extract face photo from attendance record or its sessions
+ */
+export const getFacePhotoUri = (record) => {
+    if (!record) return null;
+    if (Array.isArray(record.sessions) && record.sessions.length > 0) {
+        for (let i = record.sessions.length - 1; i >= 0; i--) {
+            const s = record.sessions[i];
+            if (s.checkoutPhotoRef) return s.checkoutPhotoRef;
+            if (s.photoRef) return s.photoRef;
+            if (s.checkinPhotoRef) return s.checkinPhotoRef;
+            if (s.checkOutImage) return s.checkOutImage;
+            if (s.checkInImage) return s.checkInImage;
+        }
+    }
+    if (record.checkoutPhotoRef) return record.checkoutPhotoRef;
+    if (record.photoRef) return record.photoRef;
+    if (record.checkinPhotoRef) return record.checkinPhotoRef;
+    if (record.checkInImage) return record.checkInImage;
+    if (record.checkOutImage) return record.checkOutImage;
+    if (record.photoData) return record.photoData;
+    if (record.facePhoto) return record.facePhoto;
+    return null;
+};
+
+/**
+ * Extract human-readable location address from record or sessions
+ */
+export const getLocationAddress = (record) => {
+    if (!record) return 'Office Location';
+    if (Array.isArray(record.sessions) && record.sessions.length > 0) {
+        for (let i = record.sessions.length - 1; i >= 0; i--) {
+            const s = record.sessions[i];
+            if (s.checkoutLocation?.address) return s.checkoutLocation.address;
+            if (s.location?.address) return s.location.address;
+            if (s.checkinLocation?.address) return s.checkinLocation.address;
+        }
+    }
+    if (record.checkoutLocation?.address) return record.checkoutLocation.address;
+    if (record.location?.address) return record.location.address;
+    if (record.checkinLocation?.address) return record.checkinLocation.address;
+    if (record.location?.latitude && record.location?.longitude) {
+        return `Lat: ${record.location.latitude.toFixed(4)}, Long: ${record.location.longitude.toFixed(4)}`;
+    }
+    return 'Registered Office Location';
+};

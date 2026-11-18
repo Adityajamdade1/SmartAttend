@@ -17,6 +17,7 @@ import {
 import MapView, { Marker } from '../../components/PlatformMap';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebaseConfig';
+import { getFacePhotoUri, getLocationAddress, formatDurationHM } from '../../utils/attendance';
 
 export default function AdminEditAttendanceScreen({ route, navigation }) {
     const { user: currentUser } = useAuth();
@@ -34,6 +35,8 @@ export default function AdminEditAttendanceScreen({ route, navigation }) {
     const [mapModalVisible, setMapModalVisible] = useState(false);
     const [selectedLocation, setSelectedLocation] = useState(null);
     const [locationTitle, setLocationTitle] = useState('');
+    const [previewPhotoUri, setPreviewPhotoUri] = useState(null);
+    const [showPhotoPreview, setShowPhotoPreview] = useState(false);
 
     const handleSave = async () => {
         try {
@@ -169,33 +172,206 @@ export default function AdminEditAttendanceScreen({ route, navigation }) {
                     </View>
                 )}
 
-                {(record?.checkInImage || record?.checkOutImage) && (
-                    <View style={styles.section}>
-                        <Text style={styles.label}>Biometric Verification Photos</Text>
-                        <View style={styles.imageRow}>
-                            {record?.checkInImage && (
-                                <View style={styles.imageBox}>
-                                    <Text style={styles.imageCaption}>Punch In Photo</Text>
-                                    <Image
-                                        source={{ uri: record.checkInImage }}
-                                        style={styles.punchImage}
-                                        resizeMode="contain"
-                                    />
-                                </View>
-                            )}
-                            {record?.checkOutImage && (
-                                <View style={styles.imageBox}>
-                                    <Text style={styles.imageCaption}>Punch Out Photo</Text>
-                                    <Image
-                                        source={{ uri: record.checkOutImage }}
-                                        style={styles.punchImage}
-                                        resizeMode="contain"
-                                    />
-                                </View>
-                            )}
-                        </View>
+                {/* Biometric Verification & Punch Photos */}
+                <View style={styles.section}>
+                    <View style={styles.sectionHeaderRow}>
+                        <Ionicons name="camera" size={20} color="#1E293B" />
+                        <Text style={styles.sectionTitleText}>Biometric Face Verification & Punch Photos</Text>
                     </View>
-                )}
+
+                    {(() => {
+                        const topFace = getFacePhotoUri(record);
+                        const hasSessions = Array.isArray(record?.sessions) && record.sessions.length > 0;
+                        const singleInPhoto = record?.photoRef || record?.checkinPhotoRef || record?.checkInImage || null;
+                        const singleOutPhoto = record?.checkoutPhotoRef || record?.checkOutImage || null;
+                        const hasAnyPhoto = Boolean(topFace || singleInPhoto || singleOutPhoto || (hasSessions && record.sessions.some(s => s.photoRef || s.checkinPhotoRef || s.checkoutPhotoRef)));
+
+                        if (!hasAnyPhoto) {
+                            return (
+                                <View style={styles.noPhotoCard}>
+                                    <Ionicons name="person-circle-outline" size={40} color="#94A3B8" />
+                                    <Text style={styles.noPhotoTitle}>No Biometric Face Photos Recorded</Text>
+                                    <Text style={styles.noPhotoSubtitle}>
+                                        Face verification photos were not captured for this attendance entry.
+                                    </Text>
+                                </View>
+                            );
+                        }
+
+                        return (
+                            <View style={{ gap: 12 }}>
+                                {/* Top Face Card */}
+                                <View style={styles.editFaceCard}>
+                                    {topFace ? (
+                                        <TouchableOpacity
+                                            onPress={() => {
+                                                setPreviewPhotoUri(topFace);
+                                                setShowPhotoPreview(true);
+                                            }}
+                                            style={styles.faceTouchWrapper}
+                                        >
+                                            <Image source={{ uri: topFace }} style={styles.editFaceImage} />
+                                            <View style={styles.zoomBadgeEdit}>
+                                                <Ionicons name="expand-outline" size={10} color="#FFF" />
+                                            </View>
+                                        </TouchableOpacity>
+                                    ) : (
+                                        <View style={styles.editFacePlaceholder}>
+                                            <Ionicons name="person" size={28} color="#94A3B8" />
+                                        </View>
+                                    )}
+                                    <View style={{ flex: 1, gap: 4 }}>
+                                        <View style={styles.verifiedTagRow}>
+                                            <Ionicons name="shield-checkmark" size={15} color="#10B981" />
+                                            <Text style={styles.verifiedTagText}>Face Biometric Verified</Text>
+                                        </View>
+                                        <Text style={styles.verifiedEmpName}>{employee.name} ({employee.employeeId || 'EMP'})</Text>
+                                        <Text style={styles.verifiedDate}>Recorded on: {record?.date || route.params.date}</Text>
+                                    </View>
+                                </View>
+
+                                {/* Multi-Session or Single Punch Photo Cards */}
+                                {hasSessions ? (
+                                    record.sessions.map((sess, idx) => {
+                                        const inPhoto = sess.photoRef || sess.checkinPhotoRef || sess.checkInImage || null;
+                                        const outPhoto = sess.checkoutPhotoRef || sess.checkOutImage || null;
+                                        const inAddr = sess.location?.address || sess.checkinLocation?.address || 'Office Location';
+                                        const outAddr = sess.checkoutLocation?.address || (sess.checkOut ? inAddr : 'Session in progress...');
+
+                                        return (
+                                            <View key={idx} style={styles.editSessionCard}>
+                                                <View style={styles.editSessionHeader}>
+                                                    <View style={styles.editSessionBadge}>
+                                                        <Text style={styles.editSessionBadgeText}>SESSION #{idx + 1}</Text>
+                                                    </View>
+                                                    <Text style={[styles.editSessionStatus, { color: sess.checkOut ? '#10B981' : '#F59E0B' }]}>
+                                                        {sess.checkOut ? 'COMPLETED' : '🟢 ACTIVE'}
+                                                    </Text>
+                                                    <Text style={styles.editSessionDuration}>
+                                                        {formatDurationHM(sess.sessionHours)}
+                                                    </Text>
+                                                </View>
+
+                                                <View style={styles.punchBoxesGrid}>
+                                                    {/* Punch In */}
+                                                    <View style={styles.editPunchInBox}>
+                                                        <View style={styles.punchHeaderRow}>
+                                                            <View style={[styles.punchStatusDot, { backgroundColor: '#10B981' }]} />
+                                                            <Text style={styles.punchTitleIn}>PUNCH IN</Text>
+                                                            <Text style={styles.punchTimeText}>{sess.checkInTime || '--:--'}</Text>
+                                                        </View>
+                                                        <View style={styles.punchBodyRow}>
+                                                            {inPhoto ? (
+                                                                <TouchableOpacity
+                                                                    onPress={() => {
+                                                                        setPreviewPhotoUri(inPhoto);
+                                                                        setShowPhotoPreview(true);
+                                                                    }}
+                                                                >
+                                                                    <Image source={{ uri: inPhoto }} style={styles.punchThumbImg} />
+                                                                    <View style={styles.zoomBadgeMini}>
+                                                                        <Ionicons name="expand-outline" size={8} color="#FFF" />
+                                                                    </View>
+                                                                </TouchableOpacity>
+                                                            ) : (
+                                                                <View style={styles.punchThumbPlaceholder}>
+                                                                    <Ionicons name="person" size={20} color="#10B981" />
+                                                                </View>
+                                                            )}
+                                                            <View style={{ flex: 1 }}>
+                                                                <View style={styles.metaRow}>
+                                                                    <Ionicons name="shield-checkmark" size={11} color="#10B981" />
+                                                                    <Text style={styles.metaTextGreen}>Face Biometric Verified</Text>
+                                                                </View>
+                                                                <Text style={styles.addrText} numberOfLines={2}>📍 {inAddr}</Text>
+                                                            </View>
+                                                        </View>
+                                                    </View>
+
+                                                    {/* Punch Out */}
+                                                    <View style={[styles.editPunchOutBox, !sess.checkOut && styles.editPunchOutPending]}>
+                                                        <View style={styles.punchHeaderRow}>
+                                                            <View style={[styles.punchStatusDot, { backgroundColor: sess.checkOut ? '#EF4444' : '#F59E0B' }]} />
+                                                            <Text style={[styles.punchTitleOut, !sess.checkOut && { color: '#D97706' }]}>PUNCH OUT</Text>
+                                                            <Text style={[styles.punchTimeText, !sess.checkOut && { color: '#D97706' }]}>
+                                                                {sess.checkOutTime || 'In Progress'}
+                                                            </Text>
+                                                        </View>
+                                                        <View style={styles.punchBodyRow}>
+                                                            {outPhoto ? (
+                                                                <TouchableOpacity
+                                                                    onPress={() => {
+                                                                        setPreviewPhotoUri(outPhoto);
+                                                                        setShowPhotoPreview(true);
+                                                                    }}
+                                                                >
+                                                                    <Image source={{ uri: outPhoto }} style={styles.punchThumbImg} />
+                                                                    <View style={styles.zoomBadgeMini}>
+                                                                        <Ionicons name="expand-outline" size={8} color="#FFF" />
+                                                                    </View>
+                                                                </TouchableOpacity>
+                                                            ) : (
+                                                                <View style={[styles.punchThumbPlaceholder, !sess.checkOut && { backgroundColor: '#FEF3C7' }]}>
+                                                                    <Ionicons
+                                                                        name={sess.checkOut ? "person" : "hourglass-outline"}
+                                                                        size={20}
+                                                                        color={sess.checkOut ? "#EF4444" : "#D97706"}
+                                                                    />
+                                                                </View>
+                                                            )}
+                                                            <View style={{ flex: 1 }}>
+                                                                <View style={styles.metaRow}>
+                                                                    <Ionicons
+                                                                        name={sess.checkOut ? "shield-checkmark" : "time"}
+                                                                        size={11}
+                                                                        color={sess.checkOut ? "#EF4444" : "#D97706"}
+                                                                    />
+                                                                    <Text style={[styles.metaTextGreen, { color: sess.checkOut ? '#EF4444' : '#D97706' }]}>
+                                                                        {sess.checkOut ? 'Face Biometric Verified' : 'Session Active'}
+                                                                    </Text>
+                                                                </View>
+                                                                <Text style={styles.addrText} numberOfLines={2}>📍 {outAddr}</Text>
+                                                            </View>
+                                                        </View>
+                                                    </View>
+                                                </View>
+                                            </View>
+                                        );
+                                    })
+                                ) : (
+                                    <View style={styles.imageRow}>
+                                        {singleInPhoto && (
+                                            <TouchableOpacity
+                                                style={styles.imageBox}
+                                                onPress={() => {
+                                                    setPreviewPhotoUri(singleInPhoto);
+                                                    setShowPhotoPreview(true);
+                                                }}
+                                            >
+                                                <Text style={styles.imageCaption}>Punch In Photo</Text>
+                                                <Image source={{ uri: singleInPhoto }} style={styles.punchImage} resizeMode="cover" />
+                                                <Text style={styles.tapToViewText}>Tap to enlarge</Text>
+                                            </TouchableOpacity>
+                                        )}
+                                        {singleOutPhoto && (
+                                            <TouchableOpacity
+                                                style={styles.imageBox}
+                                                onPress={() => {
+                                                    setPreviewPhotoUri(singleOutPhoto);
+                                                    setShowPhotoPreview(true);
+                                                }}
+                                            >
+                                                <Text style={styles.imageCaption}>Punch Out Photo</Text>
+                                                <Image source={{ uri: singleOutPhoto }} style={styles.punchImage} resizeMode="cover" />
+                                                <Text style={styles.tapToViewText}>Tap to enlarge</Text>
+                                            </TouchableOpacity>
+                                        )}
+                                    </View>
+                                )}
+                            </View>
+                        );
+                    })()}
+                </View>
 
                 {/* Location Information - Always Show */}
                 <View style={styles.section}>
@@ -405,6 +581,38 @@ export default function AdminEditAttendanceScreen({ route, navigation }) {
                     </View>
                 </View>
             </Modal>
+
+            {/* Photo Preview Modal */}
+            <Modal
+                visible={showPhotoPreview}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowPhotoPreview(false)}
+            >
+                <View style={styles.previewOverlay}>
+                    <View style={styles.previewCard}>
+                        <View style={styles.previewHeader}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.previewTitle}>{employee.name}</Text>
+                                <Text style={styles.previewSubtitle}>Biometric Face Capture ({record?.date || route.params.date})</Text>
+                            </View>
+                            <TouchableOpacity
+                                onPress={() => setShowPhotoPreview(false)}
+                                style={styles.previewCloseBtn}
+                            >
+                                <Ionicons name="close" size={24} color="#FFF" />
+                            </TouchableOpacity>
+                        </View>
+                        {previewPhotoUri ? (
+                            <Image
+                                source={{ uri: previewPhotoUri }}
+                                style={styles.previewImage}
+                                resizeMode="contain"
+                            />
+                        ) : null}
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -420,6 +628,8 @@ const styles = StyleSheet.create({
     empDate: { fontSize: 14, color: '#7F8C8D', marginTop: 4 },
     section: { marginBottom: 25 },
     label: { fontSize: 16, fontWeight: 'bold', color: '#34495E', marginBottom: 15 },
+    sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+    sectionTitleText: { fontSize: 16, fontWeight: 'bold', color: '#1E293B' },
     statusGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
     statusOption: { paddingHorizontal: 15, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#DDD', backgroundColor: '#FFF', minWidth: '45%' },
     statusOptionText: { textAlign: 'center', fontWeight: 'bold', color: '#7F8C8D' },
@@ -435,7 +645,281 @@ const styles = StyleSheet.create({
     imageRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
     imageBox: { flex: 1, alignItems: 'center', backgroundColor: '#F0F3F4', padding: 5, borderRadius: 12, overflow: 'hidden' },
     imageCaption: { fontSize: 10, fontWeight: 'bold', color: '#7F8C8D', marginVertical: 8, textTransform: 'uppercase' },
-    punchImage: { width: '100%', height: 200, borderRadius: 8, backgroundColor: '#000' },
+    punchImage: { width: '100%', height: 160, borderRadius: 8, backgroundColor: '#000' },
+    tapToViewText: { fontSize: 10, color: '#64748B', marginTop: 4, fontWeight: '600' },
+
+    // Biometric & Face Card Styles
+    noPhotoCard: {
+        backgroundColor: '#F8FAFC',
+        borderRadius: 14,
+        padding: 24,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        borderStyle: 'dashed',
+    },
+    noPhotoTitle: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#64748B',
+        marginTop: 8,
+    },
+    noPhotoSubtitle: {
+        fontSize: 12,
+        color: '#94A3B8',
+        marginTop: 4,
+        textAlign: 'center',
+    },
+    editFaceCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        padding: 12,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        gap: 12,
+    },
+    faceTouchWrapper: {
+        position: 'relative',
+    },
+    editFaceImage: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        borderWidth: 2,
+        borderColor: '#10B981',
+    },
+    editFacePlaceholder: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: '#F1F5F9',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    zoomBadgeEdit: {
+        position: 'absolute',
+        bottom: 0,
+        right: 0,
+        backgroundColor: 'rgba(15, 23, 42, 0.75)',
+        width: 18,
+        height: 18,
+        borderRadius: 9,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    verifiedTagRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    verifiedTagText: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#10B981',
+    },
+    verifiedEmpName: {
+        fontSize: 14,
+        fontWeight: '800',
+        color: '#1E293B',
+    },
+    verifiedDate: {
+        fontSize: 11,
+        color: '#64748B',
+    },
+
+    // Session styles
+    editSessionCard: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        padding: 12,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        elevation: 2,
+        gap: 10,
+    },
+    editSessionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderBottomWidth: 1,
+        borderBottomColor: '#F1F5F9',
+        paddingBottom: 8,
+    },
+    editSessionBadge: {
+        backgroundColor: '#EFF6FF',
+        borderRadius: 8,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+    },
+    editSessionBadgeText: {
+        fontSize: 10,
+        fontWeight: '800',
+        color: '#2563EB',
+    },
+    editSessionStatus: {
+        fontSize: 11,
+        fontWeight: '800',
+    },
+    editSessionDuration: {
+        fontSize: 12,
+        fontWeight: '800',
+        color: '#1E293B',
+    },
+    punchBoxesGrid: {
+        gap: 8,
+    },
+    editPunchInBox: {
+        backgroundColor: '#F0FDF4',
+        borderRadius: 12,
+        padding: 10,
+        borderWidth: 1,
+        borderColor: '#DCFCE7',
+    },
+    editPunchOutBox: {
+        backgroundColor: '#FEF2F2',
+        borderRadius: 12,
+        padding: 10,
+        borderWidth: 1,
+        borderColor: '#FEE2E2',
+    },
+    editPunchOutPending: {
+        backgroundColor: '#FFFBEB',
+        borderColor: '#FEF3C7',
+    },
+    punchHeaderRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 6,
+    },
+    punchStatusDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        marginRight: 6,
+    },
+    punchTitleIn: {
+        fontSize: 11,
+        fontWeight: '800',
+        color: '#15803D',
+        flex: 1,
+        letterSpacing: 0.5,
+    },
+    punchTitleOut: {
+        fontSize: 11,
+        fontWeight: '800',
+        color: '#B91C1C',
+        flex: 1,
+        letterSpacing: 0.5,
+    },
+    punchTimeText: {
+        fontSize: 12,
+        fontWeight: '800',
+        color: '#1E293B',
+    },
+    punchBodyRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+    punchThumbImg: {
+        width: 48,
+        height: 48,
+        borderRadius: 10,
+        borderWidth: 1.5,
+        borderColor: '#FFFFFF',
+    },
+    punchThumbPlaceholder: {
+        width: 48,
+        height: 48,
+        borderRadius: 10,
+        backgroundColor: '#DCFCE7',
+        borderWidth: 1,
+        borderColor: '#BBF7D0',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    zoomBadgeMini: {
+        position: 'absolute',
+        bottom: 2,
+        right: 2,
+        backgroundColor: 'rgba(15, 23, 42, 0.75)',
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    metaRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        marginBottom: 2,
+    },
+    metaTextGreen: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: '#15803D',
+    },
+    addrText: {
+        fontSize: 11,
+        color: '#475569',
+        fontWeight: '500',
+        lineHeight: 15,
+    },
+
+    // Photo Preview Modal Styles
+    previewOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.9)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 16,
+    },
+    previewCard: {
+        width: '100%',
+        maxWidth: 380,
+        backgroundColor: '#1E293B',
+        borderRadius: 20,
+        padding: 16,
+        alignItems: 'center',
+    },
+    previewHeader: {
+        width: '100%',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 16,
+    },
+    previewTitle: {
+        color: '#FFF',
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    previewSubtitle: {
+        color: '#94A3B8',
+        fontSize: 12,
+        marginTop: 2,
+    },
+    previewCloseBtn: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    previewImage: {
+        width: 320,
+        height: 320,
+        borderRadius: 16,
+        backgroundColor: '#0F172A',
+    },
 
     // Location styles
     noLocationCard: {

@@ -286,6 +286,10 @@ export const attendanceEngine = {
                     lateMinutes: summary.lateMinutes,
                     attendanceMode: mode,
                     location: sanitizedLocation,
+                    checkinLocation: sanitizedLocation,
+                    photoRef: photoData || existingRecord?.photoRef || null,
+                    checkinPhotoRef: photoData || existingRecord?.checkinPhotoRef || null,
+                    facePhoto: photoData || existingRecord?.facePhoto || null,
                     faceVerified: Boolean(faceVerified),
                     wifiVerified: Boolean(wifiSSID),
                     createdAt: existingRecord?.createdAt || nowISO,
@@ -362,6 +366,7 @@ export const attendanceEngine = {
                     lateMinutes: summary.lateMinutes,
                     attendanceMode: mode,
                     checkoutLocation: sanitizedLocation,
+                    checkoutPhotoRef: photoData || null,
                     updatedAt: nowISO,
                 };
             }
