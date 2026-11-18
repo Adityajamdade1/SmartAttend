@@ -1,6 +1,17 @@
+import './utils/customFontSetup';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import {
+  useFonts,
+  Montserrat_300Light,
+  Montserrat_400Regular,
+  Montserrat_500Medium,
+  Montserrat_600SemiBold,
+  Montserrat_700Bold,
+  Montserrat_800ExtraBold,
+  Montserrat_900Black,
+} from '@expo-google-fonts/montserrat';
 import Colors from './constants/Colors';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import AccountScreen from './screens/AccountScreen';
@@ -155,6 +166,32 @@ function RootNavigator() {
 }
 
 export default function App() {
+  const [fontsLoaded, fontError] = useFonts({
+    Montserrat_300Light,
+    Montserrat_400Regular,
+    Montserrat_500Medium,
+    Montserrat_600SemiBold,
+    Montserrat_700Bold,
+    Montserrat_800ExtraBold,
+    Montserrat_900Black,
+    'Montserrat': Montserrat_400Regular,
+    'Montserrat-Light': Montserrat_300Light,
+    'Montserrat-Regular': Montserrat_400Regular,
+    'Montserrat-Medium': Montserrat_500Medium,
+    'Montserrat-SemiBold': Montserrat_600SemiBold,
+    'Montserrat-Bold': Montserrat_700Bold,
+    'Montserrat-ExtraBold': Montserrat_800ExtraBold,
+    'Montserrat-Black': Montserrat_900Black,
+  });
+
+  if (!fontsLoaded && !fontError) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
+
   return (
     <AuthProvider>
       <RootNavigator />
