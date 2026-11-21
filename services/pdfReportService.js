@@ -45,19 +45,38 @@ export const pdfReportService = {
 
             const isAvailable = await Sharing.isAvailableAsync();
             if (isAvailable) {
-                await Sharing.shareAsync(shareUri, {
-                    UTI: '.pdf',
-                    mimeType: 'application/pdf',
-                    dialogTitle: `Attendance Report - ${employee?.name || 'Employee'}`,
-                });
+                try {
+                    await Sharing.shareAsync(shareUri, {
+                        UTI: '.pdf',
+                        mimeType: 'application/pdf',
+                        dialogTitle: `Attendance Report - ${employee?.name || 'Employee'}`,
+                    });
+                } catch (shareError) {
+                    console.log('Direct sharing notice, falling back to system print viewer:', shareError?.message);
+                    // Native Android Print & Save as PDF Fallback - never blocked by FileProvider permissions
+                    await Print.printAsync({ html });
+                }
             } else {
-                console.log('Sharing not available, file saved at:', shareUri);
+                console.log('Sharing not available, opening print viewer:', shareUri);
+                await Print.printAsync({ html });
             }
 
             return { success: true, uri: shareUri };
         } catch (error) {
             console.log('PDF generation error note:', error?.message);
-            throw new Error(error?.message || 'Could not export PDF report');
+            // Last resort print dialog fallback
+            try {
+                const html = buildEmployeeHtml({
+                    employee,
+                    company: company || { name: 'SmartAttend Enterprise' },
+                    records,
+                    periodTitle: periodTitle || `Attendance Report - ${new Date().toLocaleString('default', { month: 'long', year: 'numeric' })}`,
+                });
+                await Print.printAsync({ html });
+                return { success: true };
+            } catch (_fallbackErr) {
+                throw new Error(error?.message || 'Could not export PDF report');
+            }
         }
     },
 
@@ -100,17 +119,36 @@ export const pdfReportService = {
 
             const isAvailable = await Sharing.isAvailableAsync();
             if (isAvailable) {
-                await Sharing.shareAsync(shareUri, {
-                    UTI: '.pdf',
-                    mimeType: 'application/pdf',
-                    dialogTitle: 'Organization Attendance Report',
-                });
+                try {
+                    await Sharing.shareAsync(shareUri, {
+                        UTI: '.pdf',
+                        mimeType: 'application/pdf',
+                        dialogTitle: periodTitle || 'Organization Attendance Report',
+                    });
+                } catch (shareErr) {
+                    console.log('Admin direct sharing notice, falling back to print viewer:', shareErr?.message);
+                    await Print.printAsync({ html });
+                }
+            } else {
+                await Print.printAsync({ html });
             }
 
             return { success: true, uri: shareUri };
         } catch (error) {
             console.log('Admin PDF report error note:', error?.message);
-            throw new Error(error?.message || 'Could not export admin PDF report');
+            try {
+                const html = buildAdminHtml({
+                    company: company || { name: 'SmartAttend Enterprise' },
+                    records,
+                    employees,
+                    periodTitle: periodTitle || `Organization Attendance Report - ${formatDate(new Date())}`,
+                    filters,
+                });
+                await Print.printAsync({ html });
+                return { success: true };
+            } catch (_fallbackErr) {
+                throw new Error(error?.message || 'Could not export admin PDF report');
+            }
         }
     }
 };

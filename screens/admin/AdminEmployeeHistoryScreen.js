@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Calendar } from 'react-native-calendars';
-import { db } from '../../services/firebaseConfig';
+import { db, attendanceHelpers } from '../../services/firebaseConfig';
+import { attendanceEngine } from '../../services/attendanceEngine';
 import {
     formatDate,
     formatDurationHM,
@@ -49,12 +50,51 @@ export default function AdminEmployeeHistoryScreen({ route, navigation }) {
     const loadEmployeeHistory = async () => {
         try {
             setLoading(true);
-            const snapshot = await db.collection('attendance')
-                .where('userId', '==', employee.uid);
+            const targetUid = employee.uid || employee.id || employee.userId;
+            let records = [];
 
-            const records = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            // 1. Fetch records using attendanceHelpers
+            if (targetUid) {
+                const helperRes = await attendanceHelpers.getUserAttendance(targetUid);
+                if (helperRes?.success && Array.isArray(helperRes.records)) {
+                    records = [...helperRes.records];
+                }
+            }
+
+            // 2. Direct fetch of today's atomic record to ensure today's punches are immediately present
+            if (targetUid) {
+                const todayRes = await attendanceEngine.getTodayRecord(targetUid, employee.companyId);
+                if (todayRes?.exists && todayRes.data) {
+                    const todayData = todayRes.data;
+                    const existingIdx = records.findIndex(r => r.date === todayData.date);
+                    if (existingIdx !== -1) {
+                        records[existingIdx] = todayData;
+                    } else {
+                        records.unshift(todayData);
+                    }
+                }
+            }
+
+            // 3. Fallback: Query by targetUid in attendance
+            if (records.length === 0 && targetUid) {
+                const snapshot = await db.collection('attendance')
+                    .where('userId', '==', targetUid);
+                records = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            }
+
+            // 4. Secondary fallback: Query by employeeId
+            if (employee.employeeId) {
+                const empSnap = await db.collection('attendance')
+                    .where('employeeId', '==', employee.employeeId);
+                empSnap.docs.forEach(doc => {
+                    const data = { id: doc.id, ...doc.data() };
+                    if (!records.some(r => r.date === data.date || r.id === data.id)) {
+                        records.push(data);
+                    }
+                });
+            }
+
             setAttendanceRecords(records);
-
             calculateStats(records, currentDate);
             generateMarkedDates(records);
         } catch (error) {

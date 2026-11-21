@@ -46,7 +46,7 @@ export default function SuperAdminAttendanceSettingsScreen({ navigation, route }
     useEffect(() => {
         const fetchCompanies = async () => {
             try {
-                const snap = await db.collection('companies').get();
+                const snap = await db.collection('companies').getDocs();
                 const comps = (snap.docs || []).map(doc => ({
                     id: doc.id,
                     name: doc.data().name || doc.id
@@ -111,17 +111,31 @@ export default function SuperAdminAttendanceSettingsScreen({ navigation, route }
                 return;
             }
 
+            // Prompt GPS provider if disabled
+            try {
+                const isServicesEnabled = await Location.hasServicesEnabledAsync();
+                if (!isServicesEnabled) {
+                    await Location.enableNetworkProviderAsync();
+                }
+            } catch (_e) {}
+
             let position = null;
             try {
                 position = await Location.getCurrentPositionAsync({
                     accuracy: Location.Accuracy.Balanced,
                 });
             } catch (_err) {
-                position = await Location.getLastKnownPositionAsync();
+                try {
+                    position = await Location.getCurrentPositionAsync({
+                        accuracy: Location.Accuracy.Lowest,
+                    });
+                } catch (_lowErr) {
+                    position = await Location.getLastKnownPositionAsync();
+                }
             }
 
             if (!position?.coords) {
-                throw new Error('Unable to retrieve GPS coordinates. Please ensure GPS/Location is turned on.');
+                throw new Error('Unable to retrieve GPS coordinates. Please ensure GPS/Location is turned on in your device settings.');
             }
 
             const lat = parseFloat(position.coords.latitude.toFixed(6));

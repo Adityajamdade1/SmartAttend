@@ -13,6 +13,7 @@ import {
 import { FeatureGate } from '../../components/FeatureGate';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services/firebaseConfig';
+import { formatDate } from '../../utils/attendance';
 
 export default function AdminDashboardScreen({ navigation }) {
     const { user, company, logout, isFeatureEnabled, FEATURES, getUserLimit } = useAuth();
@@ -55,7 +56,7 @@ export default function AdminDashboardScreen({ navigation }) {
             const totalEmployees = employeeUsers.length;
 
             // 2. Fetch today's attendance for THIS company only
-            const today = new Date().toISOString().split('T')[0];
+            const today = formatDate(new Date());
             const attendanceSnapshot = await db.collection('attendance')
                 .where('companyId', '==', user.companyId);
             const allAttendance = attendanceSnapshot.docs.map(doc => doc.data());

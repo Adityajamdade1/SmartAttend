@@ -63,7 +63,10 @@ export default function AdminAttendanceScreen({ navigation }) {
             // Force local date interpretation to avoid shifting
             const isSunday = new Date(selectedDate + 'T00:00:00').getDay() === 0;
             const mergedRecords = allEmployeeUsers.map(emp => {
-                const record = attendanceRecords.find(r => r.userId === emp.uid);
+                const record = attendanceRecords.find(r =>
+                    (r.userId && (r.userId === emp.uid || r.userId === emp.id)) ||
+                    (r.employeeId && emp.employeeId && r.employeeId.toUpperCase() === emp.employeeId.toUpperCase())
+                );
                 if (record) return record;
 
                 // Virtual record for missing punch

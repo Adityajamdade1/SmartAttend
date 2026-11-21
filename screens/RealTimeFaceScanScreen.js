@@ -174,20 +174,37 @@ export default function RealTimeFaceScanScreen({ navigation, route }) {
             }
 
             let pos = null;
+            let lastErr = null;
+
             try {
                 pos = await Location.getCurrentPositionAsync({
                     accuracy: Location.Accuracy.Balanced,
                 });
             } catch (_curErr) {
+                lastErr = _curErr;
+                // If device settings unsatisfied, prompt system dialog to turn on GPS provider
                 try {
-                    pos = await Location.getLastKnownPositionAsync();
-                } catch (_lastErr) {
-                    pos = null;
+                    await Location.enableNetworkProviderAsync();
+                } catch (_e) {}
+
+                // Fallback to lowest accuracy mode
+                try {
+                    pos = await Location.getCurrentPositionAsync({
+                        accuracy: Location.Accuracy.Lowest,
+                    });
+                } catch (_lowErr) {
+                    lastErr = _lowErr;
+                    try {
+                        pos = await Location.getLastKnownPositionAsync();
+                    } catch (_lastKnownErr) {
+                        pos = null;
+                    }
                 }
             }
 
             if (!pos?.coords) {
-                throw new Error('Unable to retrieve GPS coordinates. Please ensure Location is turned ON.');
+                const failureReason = lastErr?.message || 'Unable to retrieve GPS coordinates. Please ensure Location (GPS) is turned ON.';
+                throw new Error(failureReason);
             }
 
             let addressText = `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`;
