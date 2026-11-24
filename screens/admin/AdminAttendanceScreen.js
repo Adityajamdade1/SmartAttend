@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -23,7 +23,21 @@ export default function AdminAttendanceScreen({ navigation }) {
     const [filteredData, setFilteredData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [currentDateObj, setCurrentDateObj] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState(formatDate(new Date()));
+
+    const changeDate = (offset) => {
+        const next = new Date(currentDateObj);
+        next.setDate(next.getDate() + offset);
+        setCurrentDateObj(next);
+        setSelectedDate(formatDate(next));
+    };
+
+    const resetToToday = () => {
+        const today = new Date();
+        setCurrentDateObj(today);
+        setSelectedDate(formatDate(today));
+    };
 
     useEffect(() => {
         const unsubscribe = navigation.addListener('focus', () => {
@@ -75,17 +89,19 @@ export default function AdminAttendanceScreen({ navigation }) {
                     employeeId: emp.employeeId,
                     employeeName: emp.name,
                     status: isSunday ? 'weekly_off' : 'absent',
-                    checkInTime: '-',
-                    checkOutTime: '-',
+                    checkInTime: '--:--',
+                    checkOutTime: '--:--',
                     workHours: 0,
                     date: selectedDate,
                     companyId: emp.companyId
                 };
             }).sort((a, b) => {
                 // Show present people first
-                if (a.checkInTime !== '-' && b.checkInTime === '-') return -1;
-                if (a.checkInTime === '-' && b.checkInTime !== '-') return 1;
-                return a.employeeName.localeCompare(b.employeeName);
+                const aPresent = a.checkInTime && a.checkInTime !== '-' && a.checkInTime !== '--:--';
+                const bPresent = b.checkInTime && b.checkInTime !== '-' && b.checkInTime !== '--:--';
+                if (aPresent && !bPresent) return -1;
+                if (!aPresent && bPresent) return 1;
+                return (a.employeeName || '').localeCompare(b.employeeName || '');
             });
 
             setAttendanceData(mergedRecords);
@@ -96,6 +112,30 @@ export default function AdminAttendanceScreen({ navigation }) {
             setLoading(false);
         }
     };
+
+    const summary = useMemo(() => {
+        let present = 0;
+        let late = 0;
+        let absent = 0;
+        attendanceData.forEach(item => {
+            const hasPunch = item.checkInTime && item.checkInTime !== '-' && item.checkInTime !== '--:--';
+            if (item.status === 'present') {
+                present++;
+            } else if (item.status === 'late' || item.status === 'half_day') {
+                late++;
+            } else if (hasPunch) {
+                present++;
+            } else {
+                absent++;
+            }
+        });
+        return {
+            total: attendanceData.length,
+            present: present + late,
+            late,
+            absent
+        };
+    }, [attendanceData]);
 
     const handleExport = async () => {
         try {
@@ -183,15 +223,15 @@ export default function AdminAttendanceScreen({ navigation }) {
                 <View style={styles.timeRow}>
                     <View style={styles.timeCol}>
                         <Text style={styles.timeLabel}>Check In</Text>
-                        <Text style={styles.timeValue}>{item.checkInTime || '--:--'}</Text>
+                        <Text style={styles.timeValue}>{item.checkInTime && item.checkInTime !== '-' ? item.checkInTime : '--:--'}</Text>
                     </View>
                     <View style={styles.timeCol}>
                         <Text style={styles.timeLabel}>Check Out</Text>
-                        <Text style={styles.timeValue}>{item.checkOutTime || '--:--'}</Text>
+                        <Text style={styles.timeValue}>{item.checkOutTime && item.checkOutTime !== '-' ? item.checkOutTime : '--:--'}</Text>
                     </View>
                     <View style={styles.timeCol}>
                         <Text style={styles.timeLabel}>Work Hours</Text>
-                        <Text style={styles.timeValue}>{item.workHours?.toFixed(1) || '0.0'} hrs</Text>
+                        <Text style={styles.timeValue}>{item.workHours ? item.workHours.toFixed(1) : '0.0'} hrs</Text>
                     </View>
                 </View>
 
@@ -243,11 +283,48 @@ export default function AdminAttendanceScreen({ navigation }) {
                 </View>
             </View>
 
-            {/* Date Selector bar (Simple text for now) */}
+            {/* Date Navigator Bar */}
             <View style={styles.dateBar}>
-                <TouchableOpacity onPress={() => {/* Implement date picker */ }}>
-                    <Text style={styles.dateText}>Date: {selectedDate}</Text>
+                <TouchableOpacity onPress={() => changeDate(-1)} style={styles.dateArrow}>
+                    <Ionicons name="chevron-back" size={20} color="#0284C7" />
                 </TouchableOpacity>
+
+                <View style={styles.dateDisplay}>
+                    <Ionicons name="calendar-outline" size={18} color="#0284C7" />
+                    <Text style={styles.dateText}>{selectedDate}</Text>
+                    {selectedDate !== formatDate(new Date()) && (
+                        <TouchableOpacity style={styles.todayBtn} onPress={resetToToday}>
+                            <Text style={styles.todayBtnText}>Today</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
+
+                <TouchableOpacity onPress={() => changeDate(1)} style={styles.dateArrow}>
+                    <Ionicons name="chevron-forward" size={20} color="#0284C7" />
+                </TouchableOpacity>
+            </View>
+
+            {/* Daily Summary Bar */}
+            <View style={styles.summaryBar}>
+                <View style={styles.summaryItem}>
+                    <Text style={styles.summaryValue}>{summary.total}</Text>
+                    <Text style={styles.summaryLabel}>Total</Text>
+                </View>
+                <View style={styles.summaryDivider} />
+                <View style={styles.summaryItem}>
+                    <Text style={[styles.summaryValue, { color: '#10B981' }]}>{summary.present}</Text>
+                    <Text style={styles.summaryLabel}>Present</Text>
+                </View>
+                <View style={styles.summaryDivider} />
+                <View style={styles.summaryItem}>
+                    <Text style={[styles.summaryValue, { color: '#F59E0B' }]}>{summary.late}</Text>
+                    <Text style={styles.summaryLabel}>Late</Text>
+                </View>
+                <View style={styles.summaryDivider} />
+                <View style={styles.summaryItem}>
+                    <Text style={[styles.summaryValue, { color: '#EF4444' }]}>{summary.absent}</Text>
+                    <Text style={styles.summaryLabel}>Absent</Text>
+                </View>
             </View>
 
             {/* Search Bar */}
@@ -292,8 +369,78 @@ const styles = StyleSheet.create({
     headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     mapBtn: { padding: 5, backgroundColor: '#EBF5FF', borderRadius: 8 },
     exportBtn: { padding: 5, backgroundColor: '#EBF5FF', borderRadius: 8 },
-    dateBar: { backgroundColor: '#E0F2F1', paddingVertical: 8, alignItems: 'center', marginBottom: 15 },
-    dateText: { fontWeight: '600', color: '#00796B' },
+    dateBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: '#E0F2FE',
+        marginHorizontal: 20,
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 12,
+        marginBottom: 10,
+    },
+    dateArrow: {
+        padding: 4,
+    },
+    dateDisplay: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    dateText: {
+        fontSize: 15,
+        fontWeight: 'bold',
+        color: '#0369A1',
+    },
+    todayBtn: {
+        backgroundColor: '#0284C7',
+        paddingVertical: 2,
+        paddingHorizontal: 8,
+        borderRadius: 6,
+        marginLeft: 6,
+    },
+    todayBtnText: {
+        color: '#FFF',
+        fontSize: 11,
+        fontWeight: 'bold',
+    },
+    summaryBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: '#FFFFFF',
+        marginHorizontal: 20,
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 12,
+        marginBottom: 12,
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 3,
+    },
+    summaryItem: {
+        alignItems: 'center',
+        flex: 1,
+    },
+    summaryValue: {
+        fontSize: 16,
+        fontWeight: '800',
+        color: '#1E293B',
+    },
+    summaryLabel: {
+        fontSize: 11,
+        color: '#64748B',
+        fontWeight: '600',
+        marginTop: 2,
+    },
+    summaryDivider: {
+        width: 1,
+        height: 24,
+        backgroundColor: '#E2E8F0',
+    },
     searchContainer: {
         flexDirection: 'row',
         alignItems: 'center',

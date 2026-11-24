@@ -222,17 +222,29 @@ export const db = {
     getDocs: async () => {
       try {
         console.log(`📥 Fetching ${collectionName} collection...`);
-        const response = await fetch(
-          `${BASE_URL}/${collectionName}?pageSize=1000&key=${API_KEY}`,
-          { method: 'GET' }
-        );
+        let allRawDocs = [];
+        let pageToken = '';
+        let pageCount = 0;
 
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
+        do {
+          let url = `${BASE_URL}/${collectionName}?pageSize=300&key=${API_KEY}`;
+          if (pageToken) url += `&pageToken=${encodeURIComponent(pageToken)}`;
+          const response = await fetch(url, { method: 'GET' });
 
-        const result = await response.json();
-        const docs = (result.documents || []).map((doc) => {
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          const result = await response.json();
+          if (Array.isArray(result.documents)) {
+            allRawDocs = allRawDocs.concat(result.documents);
+          }
+          pageToken = result.nextPageToken || '';
+          pageCount++;
+          if (pageCount > 30) break; // Safety limit
+        } while (pageToken);
+
+        const docs = allRawDocs.map((doc) => {
           const docId = doc.name.split('/').pop();
           const data = doc.fields ? Object.entries(doc.fields).reduce((acc, [key, value]) => {
             acc[key] = fromFirestoreValue(value);
@@ -251,24 +263,51 @@ export const db = {
 
     where: async (field, operator, value) => {
       try {
-        const response = await fetch(
-          `${BASE_URL}/${collectionName}?pageSize=100&key=${API_KEY}`,
-          { method: 'GET' }
-        );
+        // Fast Server-Side Query via Firestore runQuery endpoint for exact matches
+        if (operator === '==' && (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')) {
+          try {
+            const runQueryUrl = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents:runQuery?key=${API_KEY}`;
+            const queryBody = {
+              structuredQuery: {
+                from: [{ collectionId: collectionName }],
+                where: {
+                  fieldFilter: {
+                    field: { fieldPath: field },
+                    op: 'EQUAL',
+                    value: toFirestoreValue(value)
+                  }
+                }
+              }
+            };
 
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
+            const res = await fetch(runQueryUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(queryBody)
+            });
+
+            if (res.ok) {
+              const items = await res.json();
+              const docs = [];
+              for (const item of items) {
+                if (item.document) {
+                  const docId = item.document.name.split('/').pop();
+                  const data = item.document.fields ? Object.entries(item.document.fields).reduce((acc, [k, v]) => {
+                    acc[k] = fromFirestoreValue(v);
+                    return acc;
+                  }, {}) : {};
+                  docs.push({ id: docId, data: () => data });
+                }
+              }
+              return { docs };
+            }
+          } catch (queryErr) {
+            console.log('runQuery fallback to paginated getDocs:', queryErr.message);
+          }
         }
 
-        const result = await response.json();
-        const allDocs = (result.documents || []).map((doc) => {
-          const docId = doc.name.split('/').pop();
-          const data = doc.fields ? Object.entries(doc.fields).reduce((acc, [key, value]) => {
-            acc[key] = fromFirestoreValue(value);
-            return acc;
-          }, {}) : {};
-          return { id: docId, data: () => data };
-        });
+        // Fallback: fetch paginated docs and filter in memory
+        const { docs: allDocs } = await db.collection(collectionName).getDocs();
 
         let filtered = allDocs;
         if (operator === '==') {

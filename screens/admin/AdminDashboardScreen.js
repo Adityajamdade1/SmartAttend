@@ -72,11 +72,11 @@ export default function AdminDashboardScreen({ navigation }) {
             // 3. Process Recent Activities (Users + Attendance)
             const sortedUsers = [...employeeUsers].sort((a, b) =>
                 new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
-            ).slice(0, 3);
+            ).slice(0, 5);
 
             const sortedAttendance = [...allAttendance].sort((a, b) =>
-                new Date(b.checkIn || 0) - new Date(a.checkIn || 0)
-            ).slice(0, 3);
+                new Date(b.updatedAt || b.checkIn || b.createdAt || 0) - new Date(a.updatedAt || a.checkIn || a.createdAt || 0)
+            ).slice(0, 5);
 
             const activities = [];
             sortedUsers.forEach(u => activities.push({
@@ -89,19 +89,20 @@ export default function AdminDashboardScreen({ navigation }) {
             sortedAttendance.forEach(a => activities.push({
                 type: 'attendance',
                 text: `'${a.employeeName}' marked attendance`,
-                time: formatDateToRelative(a.checkIn),
-                timestamp: new Date(a.checkIn || 0).getTime()
+                time: formatDateToRelative(a.checkIn || a.updatedAt || a.createdAt),
+                timestamp: new Date(a.updatedAt || a.checkIn || a.createdAt || 0).getTime()
             }));
 
             const mergedActivities = activities.sort((a, b) => b.timestamp - a.timestamp).slice(0, 5);
 
+            const totalPresent = present + late;
             const isSunday = new Date().getDay() === 0;
-            const absentCount = isSunday ? 0 : Math.max(0, totalEmployees - present - late);
-            const weeklyOffCount = isSunday ? Math.max(0, totalEmployees - present - late) : 0;
+            const absentCount = isSunday ? 0 : Math.max(0, totalEmployees - totalPresent);
+            const weeklyOffCount = isSunday ? Math.max(0, totalEmployees - totalPresent) : 0;
 
             setStats({
                 totalEmployees,
-                presentToday: present,
+                presentToday: totalPresent,
                 absentToday: absentCount,
                 weeklyOffToday: weeklyOffCount,
                 lateToday: late,
@@ -182,7 +183,9 @@ export default function AdminDashboardScreen({ navigation }) {
                             <View style={[styles.dot, { backgroundColor: '#2ECC71' }]} />
                             <View>
                                 <Text style={[styles.miniStatValue, { color: '#27AE60' }]}>{stats.presentToday}</Text>
-                                <Text style={[styles.miniStatLabel, { color: '#27AE60' }]}>Present</Text>
+                                <Text style={[styles.miniStatLabel, { color: '#27AE60' }]}>
+                                    {stats.lateToday > 0 ? `Present (${stats.lateToday} Late)` : 'Present'}
+                                </Text>
                             </View>
                         </View>
                         <View style={[styles.miniStatCard, { backgroundColor: '#FFF5F5' }]}>
