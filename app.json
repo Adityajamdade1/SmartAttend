@@ -13,7 +13,7 @@
     },
     "android": {
       "package": "com.smartattend.attendance",
-      "versionCode": 3,
+      "versionCode": 4,
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyAn8PQG85atGyDptxCMBj_LgKug-Sfd7nQ"
